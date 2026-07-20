@@ -55,29 +55,32 @@ prompt_environment() {
 
 # Git branch: blue; Git status uses separate colors.
 prompt_git() {
-  local branch_info
-  branch_info="$(git_prompt_info)"
+  # Only display information inside a Git working tree.
+  command git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
 
-  [[ -z "$branch_info" ]] && return
+  local branch
+  local markers=""
 
-  print -nr -- "${branch_info}$(git_prompt_status)%F{blue}]%f"
+  # Normal branch name; use the short commit ID in detached HEAD state.
+  branch="$(command git symbolic-ref --quiet --short HEAD 2>/dev/null)" ||
+    branch="$(command git rev-parse --short HEAD 2>/dev/null)" ||
+    return
+
+  # Staged changes.
+  command git diff --cached --quiet --ignore-submodules -- 2>/dev/null ||
+    markers+="%F{green}+%f"
+
+  # Modified tracked files.
+  command git diff --quiet --ignore-submodules -- 2>/dev/null ||
+    markers+="%F{yellow}*%f"
+
+  # Untracked files.
+  if [[ -n "$(command git ls-files --others --exclude-standard 2>/dev/null | head -n 1)" ]]; then
+    markers+="%F{yellow}?%f"
+  fi
+
+  print -nr -- "%F{blue}[${branch}%f${markers}%F{blue}]%f"
 }
-
-ZSH_THEME_GIT_PROMPT_PREFIX="%F{blue}["
-ZSH_THEME_GIT_PROMPT_SUFFIX="%f"
-ZSH_THEME_GIT_PROMPT_DIRTY=""
-ZSH_THEME_GIT_PROMPT_CLEAN=""
-
-ZSH_THEME_GIT_PROMPT_ADDED="%F{green}+%f"
-ZSH_THEME_GIT_PROMPT_MODIFIED="%F{yellow}*%f"
-ZSH_THEME_GIT_PROMPT_UNTRACKED="%F{yellow}?%f"
-ZSH_THEME_GIT_PROMPT_RENAMED="%F{yellow}r%f"
-ZSH_THEME_GIT_PROMPT_DELETED="%F{red}-%f"
-ZSH_THEME_GIT_PROMPT_UNMERGED="%F{red}!%f"
-ZSH_THEME_GIT_PROMPT_STASHED="%F{magenta}$%f"
-ZSH_THEME_GIT_PROMPT_AHEAD="%F{cyan}↑%f"
-ZSH_THEME_GIT_PROMPT_BEHIND="%F{cyan}↓%f"
-ZSH_THEME_GIT_PROMPT_DIVERGED="%F{red}↕%f"
 
 # Environment white; username green; hostname cyan;
 # current directory yellow; Git branch blue.
