@@ -10,6 +10,11 @@ ZSH_THEME=""
 # Disable automatic update prompts. Update manually with: omz update
 zstyle ':omz:update' mode disabled
 
+# Store Oh My Zsh completion cache outside the Home directory.
+ZSH_CACHE_DIR="$HOME/.cache/oh-my-zsh"
+mkdir -p "$ZSH_CACHE_DIR"
+ZSH_COMPDUMP="$ZSH_CACHE_DIR/.zcompdump-${ZSH_VERSION}"
+
 # Prevent Python venv and Conda from adding another environment prefix.
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 export CONDA_CHANGEPS1=false
