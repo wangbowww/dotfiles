@@ -16,8 +16,8 @@ optional settings
 ```
 vim ~/.zshrc.local
 
-export http_proxy="http://10.0.0.11:17122"
-export https_proxy="http://10.0.0.11:17122"
+export http_proxy=...
+export https_proxy=...
 
 export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
 export no_proxy="$NO_PROXY"
