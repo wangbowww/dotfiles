@@ -4,9 +4,13 @@ set -euo pipefail
 DOTFILES_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ZSHRC="$DOTFILES_DIR/.zshrc"
 TARGET_ZSHRC="$HOME/.zshrc"
+
 OMZ_DIR="$HOME/.oh-my-zsh"
 OMZ_CUSTOM_DIR="$OMZ_DIR/custom"
-BACKUP_DIR="$HOME/.dotfiles-backups/$(date +%Y%m%d-%H%M%S)"
+
+BACKUP_ROOT="$HOME/.dotfiles-backups"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 
 fail() {
   printf 'Error: %s\n' "$*" >&2
@@ -15,6 +19,7 @@ fail() {
 
 command -v git >/dev/null 2>&1 || fail "git is required."
 command -v zsh >/dev/null 2>&1 || fail "zsh is required."
+[[ -f "$SOURCE_ZSHRC" ]] || fail "Missing repository file: $SOURCE_ZSHRC"
 
 install_oh_my_zsh() {
   if [[ -f "$OMZ_DIR/oh-my-zsh.sh" ]]; then
@@ -23,7 +28,7 @@ install_oh_my_zsh() {
   fi
 
   if [[ -e "$OMZ_DIR" ]]; then
-    fail "$OMZ_DIR exists but does not contain a valid Oh My Zsh installation."
+    fail "$OMZ_DIR exists but is not a valid Oh My Zsh installation."
   fi
 
   printf 'Installing Oh My Zsh...\n'
@@ -57,20 +62,37 @@ install_or_update_plugin() {
   fi
 }
 
-link_zshrc() {
-  if [[ -e "$TARGET_ZSHRC" || -L "$TARGET_ZSHRC" ]]; then
-    if [[ "$TARGET_ZSHRC" -ef "$SOURCE_ZSHRC" ]]; then
-      printf '.zshrc is already linked to this repository.\n'
-      return
-    fi
-
-    mkdir -p "$BACKUP_DIR"
-    mv "$TARGET_ZSHRC" "$BACKUP_DIR/.zshrc"
-    printf 'Previous .zshrc backed up to: %s\n' "$BACKUP_DIR/.zshrc"
+backup_existing_zshrc() {
+  if [[ ! -e "$TARGET_ZSHRC" && ! -L "$TARGET_ZSHRC" ]]; then
+    return
   fi
 
-  ln -s "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
-  printf 'Linked %s -> %s\n' "$TARGET_ZSHRC" "$SOURCE_ZSHRC"
+  mkdir -p "$BACKUP_DIR"
+
+  if [[ -L "$TARGET_ZSHRC" ]]; then
+    local link_target
+    link_target="$(readlink "$TARGET_ZSHRC" || true)"
+
+    printf '%s\n' "$link_target" > "$BACKUP_DIR/.zshrc.symlink-target"
+
+    if [[ -f "$TARGET_ZSHRC" ]]; then
+      cp -L "$TARGET_ZSHRC" "$BACKUP_DIR/.zshrc"
+    fi
+  else
+    cp -p "$TARGET_ZSHRC" "$BACKUP_DIR/.zshrc"
+  fi
+
+  printf 'Previous .zshrc backed up under: %s\n' "$BACKUP_DIR"
+}
+
+install_zshrc() {
+  backup_existing_zshrc
+
+  rm -f "$TARGET_ZSHRC"
+  cp "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
+  chmod 644 "$TARGET_ZSHRC"
+
+  printf 'Copied %s -> %s\n' "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
 }
 
 create_local_config() {
@@ -79,6 +101,7 @@ create_local_config() {
 # Machine-specific Zsh settings.
 # Examples: private proxy variables, CUDA paths, and host-specific aliases.
 EOF
+
     chmod 600 "$HOME/.zshrc.local"
     printf 'Created %s\n' "$HOME/.zshrc.local"
   fi
@@ -96,13 +119,13 @@ install_or_update_plugin \
   "zsh-syntax-highlighting" \
   "https://github.com/zsh-users/zsh-syntax-highlighting.git"
 
-link_zshrc
+install_zshrc
 create_local_config
 
 zsh -n "$TARGET_ZSHRC"
 
 printf '\nInstallation complete.\n'
-printf 'Start a test shell with:\n'
-printf '  zsh\n'
+printf 'Start or reload Zsh with:\n'
+printf '  exec zsh\n'
 printf '\nAfter testing, optionally set Zsh as the login shell:\n'
 printf '  chsh -s "$(command -v zsh)"\n'
