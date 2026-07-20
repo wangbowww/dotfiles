@@ -2,15 +2,12 @@
 set -euo pipefail
 
 DOTFILES_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 SOURCE_ZSHRC="$DOTFILES_DIR/.zshrc"
 TARGET_ZSHRC="$HOME/.zshrc"
 
 OMZ_DIR="$HOME/.oh-my-zsh"
 OMZ_CUSTOM_DIR="$OMZ_DIR/custom"
-
-BACKUP_ROOT="$HOME/.dotfiles-backups"
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 
 fail() {
   printf 'Error: %s\n' "$*" >&2
@@ -19,7 +16,10 @@ fail() {
 
 command -v git >/dev/null 2>&1 || fail "git is required."
 command -v zsh >/dev/null 2>&1 || fail "zsh is required."
-[[ -f "$SOURCE_ZSHRC" ]] || fail "Missing repository file: $SOURCE_ZSHRC"
+
+[[ -f "$SOURCE_ZSHRC" ]] ||
+  fail "Missing repository file: $SOURCE_ZSHRC"
+
 
 install_oh_my_zsh() {
   if [[ -f "$OMZ_DIR/oh-my-zsh.sh" ]]; then
@@ -46,47 +46,31 @@ install_oh_my_zsh() {
   fi
 }
 
-install_or_update_plugin() {
+
+install_plugin() {
   local name="$1"
   local url="$2"
   local target="$OMZ_CUSTOM_DIR/plugins/$name"
 
   if [[ -d "$target/.git" ]]; then
-    printf 'Updating plugin: %s\n' "$name"
-    git -C "$target" pull --ff-only
-  elif [[ -e "$target" ]]; then
-    fail "$target exists but is not a Git checkout."
-  else
-    printf 'Installing plugin: %s\n' "$name"
-    git clone --depth=1 "$url" "$target"
-  fi
-}
-
-backup_existing_zshrc() {
-  if [[ ! -e "$TARGET_ZSHRC" && ! -L "$TARGET_ZSHRC" ]]; then
+    printf 'Plugin already installed: %s\n' "$name"
     return
   fi
 
-  mkdir -p "$BACKUP_DIR"
-
-  if [[ -L "$TARGET_ZSHRC" ]]; then
-    local link_target
-    link_target="$(readlink "$TARGET_ZSHRC" || true)"
-
-    printf '%s\n' "$link_target" > "$BACKUP_DIR/.zshrc.symlink-target"
-
-    if [[ -f "$TARGET_ZSHRC" ]]; then
-      cp -L "$TARGET_ZSHRC" "$BACKUP_DIR/.zshrc"
-    fi
-  else
-    cp -p "$TARGET_ZSHRC" "$BACKUP_DIR/.zshrc"
+  if [[ -e "$target" ]]; then
+    fail "$target exists but is not a valid Git checkout."
   fi
 
-  printf 'Previous .zshrc backed up under: %s\n' "$BACKUP_DIR"
+  printf 'Installing plugin: %s\n' "$name"
+
+  git -c http.version=HTTP/1.1 \
+    clone --depth=1 "$url" "$target"
 }
 
+
 install_zshrc() {
-  backup_existing_zshrc
+  # Check the repository configuration before overwriting ~/.zshrc.
+  zsh -n "$SOURCE_ZSHRC"
 
   rm -f "$TARGET_ZSHRC"
   cp "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
@@ -95,37 +79,43 @@ install_zshrc() {
   printf 'Copied %s -> %s\n' "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
 }
 
+
 create_local_config() {
-  if [[ ! -e "$HOME/.zshrc.local" ]]; then
-    cat > "$HOME/.zshrc.local" <<'EOF'
+  if [[ -e "$HOME/.zshrc.local" ]]; then
+    printf 'Keeping existing local configuration: %s\n' \
+      "$HOME/.zshrc.local"
+    return
+  fi
+
+  cat > "$HOME/.zshrc.local" <<'EOF'
 # Machine-specific Zsh settings.
-# Examples: private proxy variables, CUDA paths, and host-specific aliases.
+# Put proxy variables, CUDA paths, private environment variables,
+# and host-specific aliases in this file.
 EOF
 
-    chmod 600 "$HOME/.zshrc.local"
-    printf 'Created %s\n' "$HOME/.zshrc.local"
-  fi
+  chmod 600 "$HOME/.zshrc.local"
+
+  printf 'Created %s\n' "$HOME/.zshrc.local"
 }
+
 
 install_oh_my_zsh
 
 mkdir -p "$OMZ_CUSTOM_DIR/plugins"
 
-install_or_update_plugin \
+install_plugin \
   "zsh-autosuggestions" \
   "https://github.com/zsh-users/zsh-autosuggestions.git"
 
-install_or_update_plugin \
+install_plugin \
   "zsh-syntax-highlighting" \
   "https://github.com/zsh-users/zsh-syntax-highlighting.git"
 
 install_zshrc
 create_local_config
 
-zsh -n "$TARGET_ZSHRC"
-
-printf '\nInstallation complete.\n'
-printf 'Start or reload Zsh with:\n'
+printf '\nZsh installation complete.\n'
+printf 'Reload the current shell with:\n'
 printf '  exec zsh\n'
-printf '\nAfter testing, optionally set Zsh as the login shell:\n'
+printf '\nOptionally set Zsh as the default login shell:\n'
 printf '  chsh -s "$(command -v zsh)"\n'
