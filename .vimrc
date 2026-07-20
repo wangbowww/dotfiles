@@ -9,7 +9,7 @@ syntax enable
 filetype plugin indent on
 
 set number
-set relativenumber
+set norelativenumber
 set cursorline
 set showcmd
 set showmatch
