@@ -33,17 +33,10 @@ install_oh_my_zsh() {
 
   printf 'Installing Oh My Zsh...\n'
 
-  if command -v curl >/dev/null 2>&1; then
-    sh -c \
-      "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
-      "" --unattended --keep-zshrc
-  elif command -v wget >/dev/null 2>&1; then
-    sh -c \
-      "$(wget -qO- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
-      "" --unattended --keep-zshrc
-  else
-    fail "curl or wget is required."
-  fi
+  git -c http.version=HTTP/1.1 \
+    clone --depth=1 \
+    https://github.com/ohmyzsh/ohmyzsh.git \
+    "$OMZ_DIR"
 }
 
 
@@ -68,15 +61,45 @@ install_plugin() {
 }
 
 
-install_zshrc() {
-  # Check the repository configuration before overwriting ~/.zshrc.
-  zsh -n "$SOURCE_ZSHRC"
+install_file_with_backup() {
+  local source_path="$1"
+  local target_path="$2"
+  local backup_path=""
+  local temporary_path="${target_path}.new.$$"
 
-  rm -f "$TARGET_ZSHRC"
-  cp "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
-  chmod 644 "$TARGET_ZSHRC"
+  if [[ -d "$target_path" && ! -L "$target_path" ]]; then
+    fail "$target_path is a directory. Move it manually before installing."
+  fi
 
-  printf 'Copied %s -> %s\n' "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
+  if [[ -f "$target_path" && ! -L "$target_path" ]] && \
+    cmp -s "$source_path" "$target_path"; then
+    printf 'Already up to date: %s\n' "$target_path"
+    return
+  fi
+
+  [[ ! -e "$temporary_path" && ! -L "$temporary_path" ]] ||
+    fail "Temporary path already exists: $temporary_path"
+
+  cp "$source_path" "$temporary_path"
+  chmod 644 "$temporary_path"
+
+  if [[ -e "$target_path" || -L "$target_path" ]]; then
+    backup_path="${target_path}.backup.$(date '+%Y%m%d-%H%M%S').$$"
+    [[ ! -e "$backup_path" && ! -L "$backup_path" ]] ||
+      fail "Backup path already exists: $backup_path"
+
+    mv "$target_path" "$backup_path"
+    printf 'Backed up %s -> %s\n' "$target_path" "$backup_path"
+  fi
+
+  if ! mv "$temporary_path" "$target_path"; then
+    if [[ -n "$backup_path" ]]; then
+      mv "$backup_path" "$target_path"
+    fi
+    fail "Failed to install $target_path. Original file restored."
+  fi
+
+  printf 'Copied %s -> %s\n' "$source_path" "$target_path"
 }
 
 
@@ -111,7 +134,8 @@ install_plugin \
   "zsh-syntax-highlighting" \
   "https://github.com/zsh-users/zsh-syntax-highlighting.git"
 
-install_zshrc
+zsh -n "$SOURCE_ZSHRC"
+install_file_with_backup "$SOURCE_ZSHRC" "$TARGET_ZSHRC"
 create_local_config
 
 printf '\nZsh installation complete.\n'
